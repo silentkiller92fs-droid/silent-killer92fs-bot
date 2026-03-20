@@ -4,7 +4,7 @@ from telegram import Update
 from telegram.ext import ApplicationBuilder, MessageHandler, CommandHandler, ContextTypes, filters
 
 # 🔐 TOKEN
-TOKEN = os.getenv("BOT_TOKEN")
+TOKEN = "8640972183:AAFoA5tHlABgdo4s6VWPkT_DP9rpauPJYMk"
 
 # 🚀 START
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
