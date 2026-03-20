@@ -1,78 +1,68 @@
 import os
 import yt_dlp
+import asyncio
 from telegram import Update, ReplyKeyboardMarkup
 from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, filters, ContextTypes
 
 TOKEN = "8640972183:AAFoA5tHlABgdo4s6VWPkT_DP9rpauPJYMk"
 
-# keyboard
-keyboard = [["360p", "720p"], ["1080p", "Audio"]]
-reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
+# buttons
+keyboard = [
+    ["360p", "720p"],
+    ["1080p", "Audio"],
+]
+markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
 
-user_choice = {}
+user_data = {}
 
-# start
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("Send video link", reply_markup=reply_markup)
+    await update.message.reply_text("Send video link", reply_markup=markup)
 
-# handle quality buttons
-async def handle_quality(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_choice[update.message.chat_id] = update.message.text
-    await update.message.reply_text(f"Selected: {update.message.text}\nNow send link")
+async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    text = update.message.text
 
-# handle link
-async def handle_link(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    url = update.message.text
-    chat_id = update.message.chat_id
-    choice = user_choice.get(chat_id, "720p")
+    # quality select
+    if text in ["360p", "720p", "1080p", "Audio"]:
+        user_data[update.message.chat_id] = text
+        await update.message.reply_text("Now send link")
+        return
+
+    url = text
+    quality = user_data.get(update.message.chat_id, "best")
 
     await update.message.reply_text("Downloading...")
 
     try:
         ydl_opts = {
-            "outtmpl": "video.%(ext)s",
-            "quiet": True,
-            "noplaylist": True,
-            "extractor_args": {"youtube": {"player_client": ["android"]}},
+            'format': 'bestvideo+bestaudio/best',
+            'quiet': True,
+            'http_headers': {
+                'User-Agent': 'Mozilla/5.0'
+            }
         }
 
-        # quality logic
-        if choice == "360p":
-            ydl_opts["format"] = "bestvideo[height<=360]+bestaudio/best[height<=360]"
-        elif choice == "720p":
-            ydl_opts["format"] = "bestvideo[height<=720]+bestaudio/best[height<=720]"
-        elif choice == "1080p":
-            ydl_opts["format"] = "bestvideo[height<=1080]+bestaudio/best[height<=1080]"
-        elif choice == "Audio":
-            ydl_opts["format"] = "bestaudio"
-            ydl_opts["postprocessors"] = [{
-                "key": "FFmpegExtractAudio",
-                "preferredcodec": "mp3",
-            }]
-        else:
-            ydl_opts["format"] = "best"
+        if quality == "Audio":
+            ydl_opts['format'] = 'bestaudio'
 
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(url, download=True)
-            file_name = ydl.prepare_filename(info)
+            file = ydl.prepare_filename(info)
 
         # send file
-        if choice == "Audio":
-            file_name = file_name.replace(".webm", ".mp3").replace(".m4a", ".mp3")
-            await update.message.reply_audio(audio=open(file_name, "rb"))
+        if quality == "Audio":
+            await update.message.reply_audio(audio=open(file, 'rb'))
         else:
-            await update.message.reply_video(video=open(file_name, "rb"))
+            await update.message.reply_video(video=open(file, 'rb'))
 
-        os.remove(file_name)
+        os.remove(file)
 
     except Exception as e:
         await update.message.reply_text(f"Error: {str(e)}")
 
-# main
 app = ApplicationBuilder().token(TOKEN).build()
 
 app.add_handler(CommandHandler("start", start))
-app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_link))
-app.add_handler(MessageHandler(filters.Regex("^(360p|720p|1080p|Audio)$"), handle_quality))
+app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 
+print("Bot Running...")
 app.run_polling()
