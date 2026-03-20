@@ -1,77 +1,46 @@
 import os
-import requests
-from telegram import Update, ReplyKeyboardMarkup
-from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, filters, ContextTypes
+import yt_dlp
+from telegram import Update
+from telegram.ext import ApplicationBuilder, MessageHandler, CommandHandler, ContextTypes, filters
 
-# 🔐 ENV VARIABLES
+# 🔐 TOKEN
 TOKEN = os.getenv("BOT_TOKEN")
-GROQ_API = os.getenv("GROQ_API")
-
-# 🎛 BUTTONS
-keyboard = [["Python", "JavaScript"], ["HTML", "CSS"]]
-markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
-
-# 💾 USER DATA
-user_idea = {}
 
 # 🚀 START
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("Apna idea bhejo")
+    await update.message.reply_text("👋 Link bhejo (Instagram / YouTube), main download karke dunga 🔥")
 
-# 🧠 MAIN FUNCTION
+# 🎯 HANDLE MESSAGE
 async def handle(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    text = update.message.text
-    chat_id = update.message.chat_id
+    url = update.message.text
 
-    # 👉 Language select
-    if text in ["Python", "JavaScript", "HTML", "CSS"]:
-        if chat_id not in user_idea:
-            await update.message.reply_text("Pehle idea bhejo")
-            return
+    await update.message.reply_text("📥 Downloading...")
 
-        idea = user_idea[chat_id]
-        await update.message.reply_text("Code bana raha hu...")
+    try:
+        ydl_opts = {
+            'format': 'best',
+            'noplaylist': True,
+            'quiet': True
+        }
 
-        try:
-            response = requests.post(
-                "https://api.groq.com/openai/v1/chat/completions",
-                headers={
-                    "Authorization": f"Bearer {GROQ_API}",
-                    "Content-Type": "application/json"
-                },
-                json={
-                    "model": "llama3-70b-8192",
-                    "messages": [
-                        {"role": "system", "content": "Only return clean code"},
-                        {"role": "user", "content": f"{text} code for: {idea}"}
-                    ]
-                }
-            )
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            info = ydl.extract_info(url, download=True)
+            file = ydl.prepare_filename(info)
 
-            data = response.json()
-            code = data["choices"][0]["message"]["content"]
+        # 📤 SEND VIDEO
+        await update.message.reply_video(video=open(file, 'rb'))
 
-            # 👉 safe send
-            if len(code) > 4000:
-                with open("code.txt", "w", encoding="utf-8") as f:
-                    f.write(code)
-                await update.message.reply_document(open("code.txt", "rb"))
-            else:
-                await update.message.reply_text(code)
+        # 🧹 DELETE FILE
+        os.remove(file)
 
-        except Exception as e:
-            await update.message.reply_text(f"Error: {str(e)}")
+    except Exception as e:
+        await update.message.reply_text(f"❌ Error: {str(e)}")
 
-    # 👉 Idea save
-    else:
-        user_idea[chat_id] = text
-        await update.message.reply_text("Language choose karo", reply_markup=markup)
-
-# 🤖 APP
+# 🧠 MAIN
 app = ApplicationBuilder().token(TOKEN).build()
 
 app.add_handler(CommandHandler("start", start))
 app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle))
 
-print("Bot running...")
+print("🤖 Bot running...")
 app.run_polling()
